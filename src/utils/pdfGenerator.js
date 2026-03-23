@@ -54,7 +54,11 @@ const SITUATION_LABELS = {
 };
 
 function formatRevenue(revenue) {
-  return `${Number(revenue).toLocaleString('fr-FR')} €/mois`;
+  // Avoid toLocaleString — it uses narrow no-break space (U+202F) as thousands
+  // separator in fr-FR, which is outside the WinAnsi encoding range in pdf-lib.
+  const n = Math.round(Number(revenue) || 0);
+  const formatted = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `${formatted} EUR/mois`;
 }
 
 function formatDate() {
@@ -137,7 +141,8 @@ async function drawModernCover(doc, userData) {
   page.drawText(fullName, { x: 50, y: 765, size: 28, font: boldFont, color: s.headerText });
 
   // Subtitle
-  const subtitle = `${SITUATION_LABELS[userData.situation] || userData.situation}  ·  ${formatRevenue(userData.revenue)}`;
+  // Middle dot U+00B7 is in WinAnsi (0xB7) — safe
+  const subtitle = `${SITUATION_LABELS[userData.situation] || userData.situation}  -  ${formatRevenue(userData.revenue)}`;
   page.drawText(subtitle, { x: 50, y: 740, size: 12, font: regularFont, color: rgb(0.8, 0.9, 1) });
 
   // Date
@@ -296,7 +301,8 @@ async function embedDocument(doc, file) {
 
 async function addWatermarkToPage(page, font) {
   const { width, height } = page.getSize();
-  const text = 'APERÇU — VERSION NON PAYÉE';
+  // Use only ASCII + Latin-1 characters (WinAnsi-safe for pdf-lib standard fonts)
+  const text = 'APERCU - VERSION NON PAYEE';
   const fontSize = 26;
 
   for (let y = 80; y < height; y += 170) {
