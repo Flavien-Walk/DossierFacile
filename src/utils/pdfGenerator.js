@@ -4,61 +4,62 @@ const {
   PDFDocument, rgb, StandardFonts, degrees, PDFName, PDFArray,
 } = require('pdf-lib');
 
-// Sharp is optional — graceful degradation if not installed
+// Sharp: optional — graceful fallback if not installed
 let sharp;
 try { sharp = require('sharp'); } catch (_) { sharp = null; }
 
-// ─── A4 Dimensions (points) ────────────────────────────────────────────────
+// ─── A4 Dimensions ────────────────────────────────────────────────────────
 const PW = 595;
 const PH = 842;
 
-// Layout zones
-const M_COVER  = 48;  // Cover page margin
-const M_INNER  = 42;  // TOC / inner pages margin
-const M_DOC    = 20;  // Document pages (tight = maximum content area)
-const SEC_H    = 40;  // Section header band height (top of doc pages)
-const FOOTER_Y = 15;  // Footer text baseline
-const FOOTER_ZONE = 30; // Total reserved height for footer
+// ─── Layout constants ─────────────────────────────────────────────────────
+const COVER_M   = 48;   // cover page margin
+const INNER_M   = 42;   // TOC / inner pages margin
+const IMG_M     = 14;   // image doc page margin
+const PDF_M     = 8;    // native PDF doc page margin
+const SEC_H     = 28;   // section header band height
+const FOOTER_H  = 28;   // footer zone height (reserved at bottom)
+const FOOTER_Y  = 13;   // footer text baseline
 
-// ─── Design Palettes ──────────────────────────────────────────────────────
+// ─── Palettes ─────────────────────────────────────────────────────────────
 const PALETTES = {
   classic: {
-    accent:      rgb(0.20, 0.27, 0.42),   // Deep slate
+    accent:      rgb(0.20, 0.27, 0.42),
     accentLight: rgb(0.87, 0.90, 0.94),
-    accentMid:   rgb(0.32, 0.41, 0.58),
+    accentMid:   rgb(0.30, 0.40, 0.57),
     textDark:    rgb(0.09, 0.11, 0.15),
     textMid:     rgb(0.36, 0.41, 0.50),
     textLight:   rgb(0.57, 0.62, 0.70),
-    pageBg:      rgb(1, 1, 1),
-    coverBg:     rgb(0.975, 0.975, 0.980),
+    coverBg:     rgb(0.974, 0.974, 0.979),
+    pageBg:      rgb(0.984, 0.984, 0.987),
     white:       rgb(1, 1, 1),
     bodyFont:    StandardFonts.TimesRoman,
     boldFont:    StandardFonts.TimesRomanBold,
     italicFont:  StandardFonts.TimesRomanItalic,
   },
   modern: {
-    accent:      rgb(0.18, 0.33, 0.86),   // Soft indigo
+    accent:      rgb(0.18, 0.33, 0.86),
     accentLight: rgb(0.91, 0.93, 0.99),
-    accentMid:   rgb(0.30, 0.46, 0.90),
+    accentMid:   rgb(0.29, 0.46, 0.90),
     textDark:    rgb(0.07, 0.09, 0.13),
     textMid:     rgb(0.33, 0.39, 0.50),
     textLight:   rgb(0.55, 0.60, 0.70),
-    pageBg:      rgb(1, 1, 1),
-    coverBg:     rgb(0.975, 0.976, 0.992),
+    coverBg:     rgb(0.974, 0.975, 0.992),
+    pageBg:      rgb(0.984, 0.985, 0.996),
     white:       rgb(1, 1, 1),
     bodyFont:    StandardFonts.Helvetica,
     boldFont:    StandardFonts.HelveticaBold,
     italicFont:  StandardFonts.HelveticaOblique,
   },
   premium: {
-    accent:      rgb(0.07, 0.17, 0.35),   // Deep navy
+    accent:      rgb(0.07, 0.17, 0.35),
     accentLight: rgb(0.90, 0.92, 0.96),
-    accentMid:   rgb(0.14, 0.28, 0.52),
+    accentMid:   rgb(0.13, 0.27, 0.51),
     textDark:    rgb(0.06, 0.09, 0.14),
     textMid:     rgb(0.31, 0.37, 0.47),
     textLight:   rgb(0.53, 0.58, 0.67),
-    pageBg:      rgb(1, 1, 1),
-    coverBg:     rgb(0.970, 0.972, 0.978),
+    coverBg:     rgb(0.970, 0.971, 0.978),
+    pageBg:      rgb(0.982, 0.982, 0.986),
     white:       rgb(1, 1, 1),
     bodyFont:    StandardFonts.Helvetica,
     boldFont:    StandardFonts.HelveticaBold,
@@ -66,13 +67,10 @@ const PALETTES = {
   },
 };
 
-// ─── Text Helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────
 const SITUATION_LABELS = {
-  cdi:      'CDI',
-  cdd:      'CDD',
-  etudiant: 'Etudiant(e)',
-  freelance:'Freelance / Independant',
-  autre:    'Autre',
+  cdi: 'CDI', cdd: 'CDD', etudiant: 'Etudiant(e)',
+  freelance: 'Freelance / Independant', autre: 'Autre',
 };
 
 function fmtRevenue(revenue) {
@@ -82,27 +80,25 @@ function fmtRevenue(revenue) {
 
 function fmtDate() {
   const d = new Date();
-  const months = [
-    'janvier','fevrier','mars','avril','mai','juin',
-    'juillet','aout','septembre','octobre','novembre','decembre',
-  ];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  const M = ['janvier','fevrier','mars','avril','mai','juin',
+    'juillet','aout','septembre','octobre','novembre','decembre'];
+  return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function getSituation(userData) {
+function getSit(userData) {
   return SITUATION_LABELS[userData.situation] || userData.situation || '';
 }
 
-function buildDocsList(files) {
-  const list = [];
-  if (files.identity)              list.push("Piece d'identite");
-  if (files.contract)              list.push('Contrat de travail');
-  if (files.payslips?.length > 0)  list.push(`Fiches de paie (${files.payslips.length})`);
-  if (files.guarantor)             list.push('Garant');
-  return list;
+function getDocsList(files) {
+  const d = [];
+  if (files.identity)             d.push("Piece d'identite");
+  if (files.contract)             d.push('Contrat de travail');
+  if (files.payslips?.length > 0) d.push(`Fiches de paie (${files.payslips.length})`);
+  if (files.guarantor)            d.push('Garant');
+  return d;
 }
 
-// ─── Font Loading ─────────────────────────────────────────────────────────
+// ─── Font loading ─────────────────────────────────────────────────────────
 async function loadFonts(doc, p) {
   return {
     r: await doc.embedFont(p.bodyFont),
@@ -111,68 +107,100 @@ async function loadFonts(doc, p) {
   };
 }
 
-// ─── Drawing Primitives ───────────────────────────────────────────────────
-
-function hRule(page, x, y, w, color, thick = 0.6) {
-  page.drawLine({ start: { x, y }, end: { x: x + w, y }, thickness: thick, color });
+// ─── Primitives ───────────────────────────────────────────────────────────
+function hRule(page, x, y, w, color, t = 0.6) {
+  page.drawLine({ start: { x, y }, end: { x: x + w, y }, thickness: t, color });
 }
 
-// Footer on every page
-function drawFooter(page, fonts, p, pageNum, total) {
+// ─── Footer ───────────────────────────────────────────────────────────────
+function drawFooter(page, fonts, p, num, total) {
   const r = fonts.r;
-  const lbl = 'Dossier Locataire';
-  const mid = `${pageNum} / ${total}`;
-  const rgt = 'DossierFacile.fr';
-
-  hRule(page, M_INNER, FOOTER_Y + 12, PW - 2 * M_INNER, p.accentLight, 0.5);
-
-  page.drawText(lbl, { x: M_INNER, y: FOOTER_Y, size: 7.5, font: r, color: p.textLight });
-
-  const mw = r.widthOfTextAtSize(mid, 7.5);
+  hRule(page, INNER_M, FOOTER_Y + 11, PW - 2 * INNER_M, p.accentLight, 0.5);
+  page.drawText('Dossier Locataire', {
+    x: INNER_M, y: FOOTER_Y, size: 7.5, font: r, color: p.textLight,
+  });
+  const mid = `${num} / ${total}`;
+  const mw  = r.widthOfTextAtSize(mid, 7.5);
   page.drawText(mid, { x: (PW - mw) / 2, y: FOOTER_Y, size: 7.5, font: r, color: p.textLight });
-
-  const rw = r.widthOfTextAtSize(rgt, 7.5);
-  page.drawText(rgt, { x: PW - M_INNER - rw, y: FOOTER_Y, size: 7.5, font: r, color: p.textLight });
+  const brand = 'DossierFacile.fr';
+  const bw    = r.widthOfTextAtSize(brand, 7.5);
+  page.drawText(brand, { x: PW - INNER_M - bw, y: FOOTER_Y, size: 7.5, font: r, color: p.textLight });
 }
 
-// ─── Section Header Band ──────────────────────────────────────────────────
-// Drawn ON TOP of the content — full-width accent band at the top of a page
+// ─── Section header band ──────────────────────────────────────────────────
+// Drawn ON TOP of the page content so it always overlays the document
 function drawSectionBand(page, title, p, fonts) {
-  // Main accent rectangle
+  // Full-width accent band
   page.drawRectangle({ x: 0, y: PH - SEC_H, width: PW, height: SEC_H, color: p.accent });
-
-  // Left decorative square (slightly darker, creates a "tab" visual)
+  // Left accent square (slightly darker)
   page.drawRectangle({ x: 0, y: PH - SEC_H, width: SEC_H, height: SEC_H, color: p.accentMid });
 
-  // Section title
-  const fontSize = 9.5;
-  const labelY = (PH - SEC_H) + (SEC_H - fontSize) / 2 + 2;
+  const fs   = 8.5;
+  const lblY = (PH - SEC_H) + (SEC_H - fs) / 2 + 1.5;
   page.drawText(title.toUpperCase(), {
-    x: SEC_H + 12, y: labelY,
-    size: fontSize, font: fonts.b,
+    x: SEC_H + 10, y: lblY,
+    size: fs, font: fonts.b,
     color: p.white, characterSpacing: 1.8,
   });
 }
 
-// ─── Image Preprocessing (sharp) ─────────────────────────────────────────
-// Trims white borders and corrects EXIF orientation for scanned documents
+// ─── computePlacement ─────────────────────────────────────────────────────
+// Returns { cx, cy, sw, sh } — centered placement within available zone.
+// hasBand: true if the section header band is present on this page.
+// isImage: adjusts margins accordingly.
+function computePlacement({ srcW, srcH, hasBand, isImage, maxScale = Infinity }) {
+  const mSide = isImage ? IMG_M : PDF_M;
+  const mTop  = hasBand ? SEC_H + mSide : mSide;
+  const mBot  = FOOTER_H + mSide;
+
+  const availW = PW - 2 * mSide;
+  const availH = PH - mTop - mBot;
+
+  const scale = Math.min(availW / srcW, availH / srcH, maxScale);
+  const sw    = srcW * scale;
+  const sh    = srcH * scale;
+  const cx    = (PW - sw) / 2;
+  const cy    = mBot + (availH - sh) / 2;
+
+  return { cx, cy, sw, sh };
+}
+
+// ─── Image preprocessing (sharp) ─────────────────────────────────────────
+// Trims white borders and corrects EXIF orientation.
 async function trimImage(buffer, mimetype) {
   if (!sharp) return { buf: buffer, jpeg: mimetype !== 'image/png' };
   try {
-    const trimmed = await sharp(buffer)
-      .rotate()                                                   // correct EXIF orientation
-      .trim({ background: { r: 248, g: 248, b: 248 }, threshold: 28 }) // remove white borders
-      .jpeg({ quality: 91, mozjpeg: false })
+    const out = await sharp(buffer)
+      .rotate()
+      .trim({ background: { r: 248, g: 248, b: 248 }, threshold: 30 })
+      .jpeg({ quality: 92 })
       .toBuffer();
-    return { buf: trimmed, jpeg: true };
+    return { buf: out, jpeg: true };
   } catch {
     return { buf: buffer, jpeg: mimetype !== 'image/png' };
   }
 }
 
-// ─── Image Embedding ──────────────────────────────────────────────────────
-// Returns the 0-based page index of the newly created page
-async function embedImage(doc, file, sectionTitle, p, fonts) {
+// ─── drawDocumentFrame ───────────────────────────────────────────────────
+// Draws a white card with a very thin border around a document region.
+// Used for images to give them a framed / presented feel.
+function drawDocumentFrame(page, cx, cy, sw, sh, p) {
+  // Outer tinted halo
+  page.drawRectangle({
+    x: cx - 6, y: cy - 6, width: sw + 12, height: sh + 12,
+    color: p.accentLight,
+  });
+  // White card
+  page.drawRectangle({
+    x: cx - 1, y: cy - 1, width: sw + 2, height: sh + 2,
+    color: p.white,
+  });
+}
+
+// ─── fitImageToCanvas ────────────────────────────────────────────────────
+// Embeds an image file on a fresh A4 page with section band and frame.
+// Returns the 0-based page index of the new page.
+async function fitImageToCanvas(doc, file, sectionTitle, p, fonts) {
   const pageIndex = doc.getPageCount();
 
   const { buf, jpeg } = await trimImage(file.buffer, file.mimetype);
@@ -185,226 +213,170 @@ async function embedImage(doc, file, sectionTitle, p, fonts) {
   }
 
   const { width: iw, height: ih } = image;
-
-  // Available content zone on this page
-  const topPad = (sectionTitle ? SEC_H : 0) + M_DOC;
-  const botPad = FOOTER_ZONE + M_DOC;
-  const availH = PH - topPad - botPad;
-  const availW = PW - 2 * M_DOC;
-
-  // Scale: fill available zone; allow upscale up to 1.8× for small scans
-  const scale = Math.min(availW / iw, availH / ih, 1.8);
-  const sw = iw * scale;
-  const sh = ih * scale;
-
-  // Center in available zone (X centered on page, Y centered in content area)
-  const cx = (PW - sw) / 2;
-  const cy = botPad + (availH - sh) / 2;
+  const { cx, cy, sw, sh } = computePlacement({
+    srcW: iw, srcH: ih,
+    hasBand: !!sectionTitle,
+    isImage: true,
+    maxScale: 1.8, // allow upscale for small scans (ID cards etc.)
+  });
 
   const page = doc.addPage([PW, PH]);
+  page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.pageBg });
 
-  // White background
-  page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.white });
-
-  // Subtle drop-shadow card effect (grey rectangle under the image)
-  page.drawRectangle({
-    x: cx - 4, y: cy - 4, width: sw + 8, height: sh + 8,
-    color: rgb(0.89, 0.89, 0.91),
-  });
-  page.drawRectangle({
-    x: cx - 1, y: cy - 1, width: sw + 2, height: sh + 2,
-    color: p.white,
-  });
-
-  // Image
+  drawDocumentFrame(page, cx, cy, sw, sh, p);
   page.drawImage(image, { x: cx, y: cy, width: sw, height: sh });
 
-  // Section band drawn last = appears on top
   if (sectionTitle) drawSectionBand(page, sectionTitle, p, fonts);
-
   return pageIndex;
 }
 
-// ─── PDF Document Embedding ───────────────────────────────────────────────
-// Uses embedPdf + drawPage (XObject) for full placement control.
-// Returns the 0-based page index of the first embedded page.
-async function embedPDF(doc, file, sectionTitle, p, fonts) {
-  const firstPageIndex = doc.getPageCount();
+// ─── fitPdfPageToCanvas ──────────────────────────────────────────────────
+// Embeds every page of a PDF source as an XObject on a fresh A4 page.
+// Returns the 0-based page index of the first new page.
+async function fitPdfPageToCanvas(doc, file, sectionTitle, p, fonts) {
+  const firstIdx = doc.getPageCount();
 
   let srcDoc;
   try {
     srcDoc = await PDFDocument.load(file.buffer, { ignoreEncryption: true });
   } catch {
-    return firstPageIndex;
+    return firstIdx;
   }
+  if (srcDoc.getPageCount() === 0) return firstIdx;
 
-  const pageCount = srcDoc.getPageCount();
-  if (pageCount === 0) return firstPageIndex;
-
-  // Embed all source pages as XObjects (one embedPdf call for efficiency)
   let embedded;
   try {
     embedded = await doc.embedPdf(srcDoc, srcDoc.getPageIndices());
   } catch {
-    // Fallback: direct page copy (no layout control, but content preserved)
+    // Fallback: direct page copy (loses placement control, but content is preserved)
     try {
       const copied = await doc.copyPages(srcDoc, srcDoc.getPageIndices());
       copied.forEach(cp => doc.addPage(cp));
-    } catch { /* skip entirely */ }
-    return firstPageIndex;
+    } catch { /* skip */ }
+    return firstIdx;
   }
 
   for (let i = 0; i < embedded.length; i++) {
     const ep      = embedded[i];
     const isFirst = i === 0;
-
     const { width: epW, height: epH } = ep;
-    if (!epW || !epH) continue; // malformed page — skip
+    if (!epW || !epH) continue;
 
-    // Content zone for this page
-    const topPad = (isFirst && sectionTitle ? SEC_H : 0) + M_DOC;
-    const botPad = FOOTER_ZONE + M_DOC;
-    const availH = PH - topPad - botPad;
-    const availW = PW - 2 * M_DOC;
-
-    // Scale to fill available zone (no upscale for PDFs — they are already high-res)
-    const scale = Math.min(availW / epW, availH / epH);
-    const sw    = epW * scale;
-    const sh    = epH * scale;
-    const cx    = (PW - sw) / 2;
-    const cy    = botPad + (availH - sh) / 2;
+    const { cx, cy, sw, sh } = computePlacement({
+      srcW: epW, srcH: epH,
+      hasBand: isFirst && !!sectionTitle,
+      isImage: false,
+    });
 
     const page = doc.addPage([PW, PH]);
-
-    // White background
-    page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.white });
-
-    // Draw the embedded page (XObject)
+    page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.pageBg });
     page.drawPage(ep, { x: cx, y: cy, width: sw, height: sh });
 
-    // Section band on first page — drawn after drawPage so it is on top
-    if (isFirst && sectionTitle) {
-      drawSectionBand(page, sectionTitle, p, fonts);
-    }
+    // Section band drawn after drawPage — appears on top
+    if (isFirst && sectionTitle) drawSectionBand(page, sectionTitle, p, fonts);
   }
 
-  return firstPageIndex;
+  return firstIdx;
 }
 
-// ─── Embed Router ─────────────────────────────────────────────────────────
+// ─── embedDoc router ─────────────────────────────────────────────────────
 async function embedDoc(doc, file, sectionTitle, p, fonts) {
   if (file.mimetype === 'application/pdf') {
-    return embedPDF(doc, file, sectionTitle, p, fonts);
+    return fitPdfPageToCanvas(doc, file, sectionTitle, p, fonts);
   }
-  return embedImage(doc, file, sectionTitle, p, fonts);
+  return fitImageToCanvas(doc, file, sectionTitle, p, fonts);
 }
 
-// ─── PDF Link Annotations (for TOC) ──────────────────────────────────────
-// Adds a GoTo link annotation that jumps to targetPageIndex when clicked.
-function addGoToLink(doc, sourcePage, rect, targetPageIndex) {
-  try {
-    const targetPage = doc.getPage(targetPageIndex);
-    const annot = doc.context.obj({
-      Type:    PDFName.of('Annot'),
-      Subtype: PDFName.of('Link'),
-      Rect:    doc.context.obj(rect),             // [x1, y1, x2, y2]
-      Border:  doc.context.obj([0, 0, 0]),
-      Dest:    doc.context.obj([targetPage.ref, PDFName.of('Fit')]),
-    });
-    const ref = doc.context.register(annot);
-
-    const annotsKey = PDFName.of('Annots');
-    const existing  = sourcePage.node.lookupMaybe(annotsKey, PDFArray);
-    if (existing) {
-      existing.push(ref);
-    } else {
-      sourcePage.node.set(annotsKey, doc.context.obj([ref]));
-    }
-  } catch (_) {
-    // Link annotations are decorative — never crash for this
-  }
-}
-
-// ─── Table of Contents ────────────────────────────────────────────────────
-// Called AFTER all sections are built, so page indices are final.
-function drawTOC(tocPage, entries, doc, p, fonts) {
+// ─── buildClickableToc ───────────────────────────────────────────────────
+// Draws TOC content on a placeholder page and adds GoTo link annotations.
+// Called after all sections are built so page indices are final.
+function buildClickableToc(tocPage, entries, doc, p, fonts) {
   const { r, b } = fonts;
-  const x  = M_INNER;
-  const cw = PW - 2 * M_INNER;
+  const x  = INNER_M;
+  const cw = PW - 2 * INNER_M;
 
-  // Background + top bar
-  tocPage.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.pageBg });
+  // Page background + top bar
+  tocPage.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.white });
   tocPage.drawRectangle({ x: 0, y: PH - 4, width: PW, height: 4, color: p.accent });
 
-  let y = PH - 4 - M_INNER - 6;
+  let y = PH - 4 - INNER_M - 6;
 
-  // TOC title
   tocPage.drawText('SOMMAIRE', {
     x, y, size: 8.5, font: b, color: p.accent, characterSpacing: 3,
   });
-  y -= 10;
+  y -= 9;
   hRule(tocPage, x, y, cw, p.accentLight, 0.8);
-  y -= 32;
+  y -= 30;
 
-  const ROW_H = 30;
+  const ROW_H = 29;
 
   for (const entry of entries) {
     const labelY = y - ROW_H / 2 + 5;
 
     // Entry label
     tocPage.drawText(entry.label, {
-      x: x + 12, y: labelY, size: 11, font: r, color: p.textDark,
+      x: x + 10, y: labelY, size: 11, font: r, color: p.textDark,
     });
 
-    // Page number (right-aligned, bold, accent color)
+    // Page number
     const pgStr = String(entry.displayPage);
     const pgW   = b.widthOfTextAtSize(pgStr, 11);
     tocPage.drawText(pgStr, {
       x: x + cw - pgW, y: labelY, size: 11, font: b, color: p.accent,
     });
 
-    // Dot leader between label and page number
-    const dotStart = x + 12 + r.widthOfTextAtSize(entry.label, 11) + 10;
+    // Dot leader
+    const dotStart = x + 10 + r.widthOfTextAtSize(entry.label, 11) + 10;
     const dotEnd   = x + cw - pgW - 12;
     for (let lx = dotStart; lx < dotEnd; lx += 5) {
-      tocPage.drawRectangle({
-        x: lx, y: labelY + 3, width: 1.5, height: 1.5, color: p.accentLight,
-      });
+      tocPage.drawRectangle({ x: lx, y: labelY + 3, width: 1.5, height: 1.5, color: p.accentLight });
     }
 
-    // Bottom separator
     hRule(tocPage, x, y - ROW_H, cw, p.accentLight, 0.4);
 
-    // Clickable link — covers the full row rectangle
-    addGoToLink(doc, tocPage,
-      [x, y - ROW_H, x + cw, y + 2],
-      entry.pageIndex,
-    );
+    // GoTo link annotation
+    _addGoToLink(doc, tocPage, [x, y - ROW_H, x + cw, y + 2], entry.pageIndex);
 
     y -= ROW_H + 6;
   }
 }
 
-// ─── Cover Page ───────────────────────────────────────────────────────────
-async function buildCoverPage(doc, userData, files, p, fonts) {
+// ─── Internal PDF link (GoTo annotation) ─────────────────────────────────
+function _addGoToLink(doc, srcPage, rect, targetIdx) {
+  try {
+    const target = doc.getPage(targetIdx);
+    const annot  = doc.context.obj({
+      Type:    PDFName.of('Annot'),
+      Subtype: PDFName.of('Link'),
+      Rect:    doc.context.obj(rect),
+      Border:  doc.context.obj([0, 0, 0]),
+      Dest:    doc.context.obj([target.ref, PDFName.of('Fit')]),
+    });
+    const ref = doc.context.register(annot);
+    const key = PDFName.of('Annots');
+    const arr = srcPage.node.lookupMaybe(key, PDFArray);
+    if (arr) { arr.push(ref); }
+    else      { srcPage.node.set(key, doc.context.obj([ref])); }
+  } catch (_) { /* annotations are decorative — never crash */ }
+}
+
+// ─── drawCover ────────────────────────────────────────────────────────────
+async function drawCover(doc, userData, files, p, fonts) {
   const page = doc.addPage([PW, PH]);
   const { r, b, i } = fonts;
+  const x  = COVER_M;
+  const cw = PW - 2 * COVER_M;
 
-  const x  = M_COVER;
-  const cw = PW - 2 * M_COVER;
-
-  // Background (slightly warm off-white)
+  // Background
   page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.coverBg });
-
   // Top accent bar
   page.drawRectangle({ x: 0, y: PH - 5, width: PW, height: 5, color: p.accent });
-
-  // Left thin accent strip
+  // Left thin strip
   page.drawRectangle({ x: 0, y: 0, width: 3, height: PH - 5, color: p.accentLight });
 
-  let y = PH - 5 - M_COVER - 8;
+  let y = PH - 5 - COVER_M - 8;
 
-  // ── Header row: label + date ──────────────────────────────────────────
+  // ── Label + date ──────────────────────────────────────────────────────
   page.drawText('DOSSIER LOCATAIRE', {
     x, y, size: 9, font: b, color: p.accent, characterSpacing: 3,
   });
@@ -413,23 +385,20 @@ async function buildCoverPage(doc, userData, files, p, fonts) {
   page.drawText(dt, { x: x + cw - dtw, y, size: 9, font: r, color: p.textLight });
   y -= 10;
   hRule(page, x, y, cw, p.accentLight, 0.7);
-  y -= 42;
+  y -= 44;
 
-  // ── Hero: full name ───────────────────────────────────────────────────
+  // ── Full name (hero) ──────────────────────────────────────────────────
   const fullName = `${userData.firstName} ${userData.lastName}`;
   page.drawText(fullName, { x, y, size: 32, font: b, color: p.textDark });
-  y -= 17;
-
-  // Accent underline below name
-  page.drawLine({ start: { x, y }, end: { x: x + 62, y }, thickness: 3, color: p.accent });
+  y -= 16;
+  page.drawLine({ start: { x, y }, end: { x: x + 60, y }, thickness: 3, color: p.accent });
   y -= 18;
 
-  // Situation + revenue subtitle
-  const situation = getSituation(userData);
-  const subtitle  = `${situation}  —  ${fmtRevenue(userData.revenue)}`;
-  page.drawText(subtitle, { x, y, size: 12, font: r, color: p.textMid });
+  const sit = getSit(userData);
+  page.drawText(`${sit}  —  ${fmtRevenue(userData.revenue)}`, {
+    x, y, size: 12, font: r, color: p.textMid,
+  });
   y -= 36;
-
   hRule(page, x, y, cw, p.accentLight, 0.7);
   y -= 40;
 
@@ -437,32 +406,22 @@ async function buildCoverPage(doc, userData, files, p, fonts) {
   const colW = (cw - 32) / 2;
   const col2 = x + colW + 32;
 
-  // Left col: PROFIL
   page.drawText('PROFIL', { x, y, size: 7.5, font: b, color: p.accent, characterSpacing: 2 });
-  page.drawLine({ start: { x, y: y - 8 }, end: { x: x + 24, y: y - 8 }, thickness: 2, color: p.accent });
+  page.drawLine({ start: { x, y: y - 8 }, end: { x: x + 22, y: y - 8 }, thickness: 2, color: p.accent });
 
-  // Right col: CONTACT
   page.drawText('CONTACT', { x: col2, y, size: 7.5, font: b, color: p.accent, characterSpacing: 2 });
-  page.drawLine({ start: { x: col2, y: y - 8 }, end: { x: col2 + 24, y: y - 8 }, thickness: 2, color: p.accent });
+  page.drawLine({ start: { x: col2, y: y - 8 }, end: { x: col2 + 22, y: y - 8 }, thickness: 2, color: p.accent });
 
-  let ly = y - 28;
-  let ry = y - 28;
+  let ly = y - 28, ry = y - 28;
 
-  for (const [label, val] of [
-    ['SITUATION',    situation],
-    ['REVENUS NETS', fmtRevenue(userData.revenue)],
-  ]) {
-    page.drawText(label, { x, y: ly, size: 7, font: b, color: p.textLight, characterSpacing: 0.5 });
-    page.drawText(val,   { x, y: ly - 14, size: 11, font: r, color: p.textDark });
+  for (const [lbl, val] of [['SITUATION', sit], ['REVENUS NETS', fmtRevenue(userData.revenue)]]) {
+    page.drawText(lbl, { x, y: ly,      size: 7,  font: b, color: p.textLight, characterSpacing: 0.5 });
+    page.drawText(val, { x, y: ly - 13, size: 11, font: r, color: p.textDark });
     ly -= 40;
   }
-
-  for (const [label, val] of [
-    ['EMAIL',     userData.email],
-    ['TELEPHONE', userData.phone],
-  ]) {
-    page.drawText(label, { x: col2, y: ry, size: 7, font: b, color: p.textLight, characterSpacing: 0.5 });
-    page.drawText(val,   { x: col2, y: ry - 14, size: 11, font: r, color: p.textDark });
+  for (const [lbl, val] of [['EMAIL', userData.email], ['TELEPHONE', userData.phone]]) {
+    page.drawText(lbl, { x: col2, y: ry,      size: 7,  font: b, color: p.textLight, characterSpacing: 0.5 });
+    page.drawText(val, { x: col2, y: ry - 13, size: 11, font: r, color: p.textDark });
     ry -= 40;
   }
 
@@ -471,13 +430,11 @@ async function buildCoverPage(doc, userData, files, p, fonts) {
   y -= 36;
 
   // ── Documents list ────────────────────────────────────────────────────
-  page.drawText('CONTENU DU DOSSIER', {
-    x, y, size: 7.5, font: b, color: p.accent, characterSpacing: 2,
-  });
-  page.drawLine({ start: { x, y: y - 8 }, end: { x: x + 24, y: y - 8 }, thickness: 2, color: p.accent });
+  page.drawText('CONTENU DU DOSSIER', { x, y, size: 7.5, font: b, color: p.accent, characterSpacing: 2 });
+  page.drawLine({ start: { x, y: y - 8 }, end: { x: x + 22, y: y - 8 }, thickness: 2, color: p.accent });
   y -= 28;
 
-  for (const name of buildDocsList(files)) {
+  for (const name of getDocsList(files)) {
     page.drawRectangle({ x, y: y + 2.5, width: 4, height: 4, color: p.accent });
     page.drawText(name, { x: x + 14, y, size: 11, font: r, color: p.textDark });
     y -= 23;
@@ -487,28 +444,24 @@ async function buildCoverPage(doc, userData, files, p, fonts) {
   hRule(page, x, y, cw, p.accentLight, 0.7);
   y -= 22;
 
-  // Closing note
   page.drawText(
     'Dossier constitue avec soin. Tous les documents fournis sont authentiques.',
     { x, y, size: 8.5, font: i, color: p.textLight },
   );
 }
 
-// ─── Watermark ────────────────────────────────────────────────────────────
-// Moderate grid pattern — visible but non-aggressive, does not obscure content
-function applyWatermark(page, font) {
+// ─── applyPreviewWatermark ────────────────────────────────────────────────
+// Moderate grid: visible enough to prevent free use, light enough to read through.
+function applyPreviewWatermark(page, font) {
   const { width, height } = page.getSize();
-  const text = 'APERCU';
-
-  // 4×5 grid, rotated 35°, very low opacity
   for (let row = 0; row < 5; row++) {
     for (let col = 0; col < 4; col++) {
-      page.drawText(text, {
-        x:       (col * width  / 3) - 25,
+      page.drawText('APERCU', {
+        x:       (col * width / 3) - 20,
         y:       (row * height / 4) + 35,
-        size:    38,
+        size:    36,
         font,
-        color:   rgb(0.62, 0.62, 0.62),
+        color:   rgb(0.60, 0.60, 0.60),
         opacity: 0.07,
         rotate:  degrees(35),
       });
@@ -516,15 +469,13 @@ function applyWatermark(page, font) {
   }
 }
 
-// ─── Main Generator ───────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────
 
 /**
- * Generate a dossier locataire PDF.
- *
  * @param {object}  userData      { firstName, lastName, email, phone, situation, revenue }
  * @param {object}  files         { identity, contract, payslips[], guarantor }
  * @param {string}  styleName     'classic' | 'modern' | 'premium'
- * @param {boolean} withWatermark true for preview, false for paid final
+ * @param {boolean} withWatermark true for preview, false for paid PDF
  * @returns {Promise<Buffer>}
  */
 async function generateDossierPDF(userData, files, styleName, withWatermark) {
@@ -532,61 +483,55 @@ async function generateDossierPDF(userData, files, styleName, withWatermark) {
   const doc = await PDFDocument.create();
   const f   = await loadFonts(doc, p);
 
-  // ── 1. Cover page (index 0) ──────────────────────────────────────────
-  await buildCoverPage(doc, userData, files, p, f);
+  // 1. Cover (index 0)
+  await drawCover(doc, userData, files, p, f);
 
-  // ── 2. TOC placeholder page (index 1) ───────────────────────────────
-  // We add it now as a blank page and populate it AFTER all sections are
-  // appended, because we need to know each section's final page index.
+  // 2. TOC placeholder (index 1) — populated after all sections are known
   const tocPage = doc.addPage([PW, PH]);
 
-  // Fixed TOC entries for cover + TOC itself
   const tocEntries = [
     { label: 'Couverture', pageIndex: 0, displayPage: 1 },
     { label: 'Sommaire',   pageIndex: 1, displayPage: 2 },
   ];
 
-  // ── 3. Sections ──────────────────────────────────────────────────────
-
-  // Identity (required)
+  // 3. Identity
   if (files.identity) {
     const idx = await embedDoc(doc, files.identity, "Piece d'identite", p, f);
     tocEntries.push({ label: "Piece d'identite", pageIndex: idx, displayPage: idx + 1 });
   }
 
-  // Work contract (optional)
+  // 4. Contract
   if (files.contract) {
     const idx = await embedDoc(doc, files.contract, 'Contrat de travail', p, f);
     tocEntries.push({ label: 'Contrat de travail', pageIndex: idx, displayPage: idx + 1 });
   }
 
-  // Payslips (optional, multiple) — only the first gets a section header + TOC entry
+  // 5. Payslips — first page gets section band + TOC entry; rest are continuation
   if (files.payslips?.length > 0) {
     const idx = await embedDoc(doc, files.payslips[0], 'Fiches de paie', p, f);
     tocEntries.push({ label: 'Fiches de paie', pageIndex: idx, displayPage: idx + 1 });
-
     for (let i = 1; i < files.payslips.length; i++) {
-      await embedDoc(doc, files.payslips[i], null, p, f); // continuation — no section band
+      await embedDoc(doc, files.payslips[i], null, p, f);
     }
   }
 
-  // Guarantor (optional)
+  // 6. Guarantor
   if (files.guarantor) {
     const idx = await embedDoc(doc, files.guarantor, 'Garant', p, f);
     tocEntries.push({ label: 'Garant', pageIndex: idx, displayPage: idx + 1 });
   }
 
-  const totalPages = doc.getPageCount();
+  const total = doc.getPageCount();
 
-  // ── 4. Populate TOC (2nd pass — all page indices are now known) ──────
-  drawTOC(tocPage, tocEntries, doc, p, f);
+  // 7. Populate TOC (2nd pass — all indices are now final)
+  buildClickableToc(tocPage, tocEntries, doc, p, f);
 
-  // ── 5. Footers on every page ─────────────────────────────────────────
-  doc.getPages().forEach((pg, i) => drawFooter(pg, f, p, i + 1, totalPages));
+  // 8. Footer on every page
+  doc.getPages().forEach((pg, i) => drawFooter(pg, f, p, i + 1, total));
 
-  // ── 6. Watermark (preview only) ───────────────────────────────────────
+  // 9. Watermark on preview only
   if (withWatermark) {
-    for (const pg of doc.getPages()) applyWatermark(pg, f.b);
+    for (const pg of doc.getPages()) applyPreviewWatermark(pg, f.b);
   }
 
   return Buffer.from(await doc.save());
