@@ -18,26 +18,30 @@ const defaultFormData: UserFormData = {
   phone: '',
   situation: '' as never,
   revenue: '',
+  hasGuarantor: false,
 };
 
 const defaultFiles: DossierFiles = {
-  identity: null,
-  contract: null,
-  payslips: [],
-  guarantor: null,
+  identity:       null,
+  domicile:       null,
+  contract:       null,
+  payslips:       [],
+  taxNotice:      null,
+  businessDocs:   [],
+  guarantorFiles: [],
 };
 
 export default function CreatePage() {
-  const [step, setStep]       = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep]         = useState<1 | 2 | 3 | 4>(1);
   const [formData, setFormData] = useState<UserFormData>(defaultFormData);
-  const [files, setFiles]     = useState<DossierFiles>(defaultFiles);
-  const [style, setStyle]     = useState<DossierStyle>('modern');
+  const [files, setFiles]       = useState<DossierFiles>(defaultFiles);
+  const [style, setStyle]       = useState<DossierStyle>('modern');
 
   // Preview state — lifted here so generation starts at step 3
-  const [previewUrl, setPreviewUrl]     = useState<string | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [generating, setGenerating]     = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewUrl,    setPreviewUrl]    = useState<string | null>(null);
+  const [sessionToken, setSessionToken]  = useState<string | null>(null);
+  const [generating,   setGenerating]    = useState(false);
+  const [previewError, setPreviewError]  = useState<string | null>(null);
 
   const next = () => setStep((s) => Math.min(s + 1, 4) as 1 | 2 | 3 | 4);
   const back = () => setStep((s) => Math.max(s - 1, 1) as 1 | 2 | 3 | 4);
@@ -95,7 +99,14 @@ export default function CreatePage() {
             <StepForm data={formData} onChange={setFormData} onNext={next} />
           )}
           {step === 2 && (
-            <StepUpload files={files} onChange={setFiles} onNext={next} onBack={back} />
+            <StepUpload
+              files={files}
+              onChange={setFiles}
+              onNext={next}
+              onBack={back}
+              situation={formData.situation}
+              hasGuarantor={formData.hasGuarantor}
+            />
           )}
           {step === 3 && (
             <StepStyle

@@ -1,6 +1,13 @@
 export type DossierStyle = 'classic' | 'modern' | 'premium';
 
-export type Situation = 'cdi' | 'cdd' | 'etudiant' | 'freelance' | 'autre';
+export type Situation =
+  | 'cdi'
+  | 'cdd'
+  | 'alternant'
+  | 'etudiant'
+  | 'freelance'
+  | 'retraite'
+  | 'autre';
 
 export interface UserFormData {
   firstName: string;
@@ -9,13 +16,17 @@ export interface UserFormData {
   phone: string;
   situation: Situation;
   revenue: string;
+  hasGuarantor: boolean;
 }
 
 export interface DossierFiles {
-  identity: File | null;
-  contract: File | null;
-  payslips: File[];
-  guarantor: File | null;
+  identity: File | null;        // obligatoire — tous profils
+  domicile: File | null;        // recommandé — tous profils
+  contract: File | null;        // CDI, CDD, alternant, étudiant
+  payslips: File[];             // CDI, CDD, alternant, retraité
+  taxNotice: File | null;       // recommandé — CDI, CDD, alternant, retraité
+  businessDocs: File[];         // freelance : Kbis, bilans, liasses fiscales
+  guarantorFiles: File[];       // si hasGuarantor
 }
 
 export interface WizardState {
@@ -39,9 +50,11 @@ export interface CheckoutResponse {
 }
 
 export const SITUATION_LABELS: Record<Situation, string> = {
-  cdi: 'CDI',
-  cdd: 'CDD',
-  etudiant: 'Étudiant(e)',
-  freelance: 'Freelance / Indépendant',
-  autre: 'Autre',
+  cdi:       'Salarié(e) CDI',
+  cdd:       'Salarié(e) CDD',
+  alternant: 'Alternant(e) / Apprenti(e)',
+  etudiant:  'Étudiant(e)',
+  freelance: 'Freelance / Indépendant(e)',
+  retraite:  'Retraité(e)',
+  autre:     'Autre situation',
 };

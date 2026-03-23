@@ -14,17 +14,40 @@ const inputClass =
 
 const labelClass = 'block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2';
 
+const REVENUE_CONFIG: Record<Situation | '', { label: string; placeholder: string }> = {
+  '':        { label: 'Revenus mensuels nets',             placeholder: '2 500' },
+  cdi:       { label: 'Revenus mensuels nets',             placeholder: '2 500' },
+  cdd:       { label: 'Revenus mensuels nets',             placeholder: '2 200' },
+  alternant: { label: 'Revenus mensuels nets',             placeholder: '1 200' },
+  etudiant:  { label: 'Revenus mensuels (jobs, bourses…)', placeholder: '0' },
+  freelance: { label: 'Revenus mensuels moyens nets',      placeholder: '3 500' },
+  retraite:  { label: 'Pension mensuelle nette',           placeholder: '1 800' },
+  autre:     { label: 'Revenus mensuels nets',             placeholder: '2 000' },
+};
+
+const SITUATION_HINTS: Partial<Record<Situation, string>> = {
+  etudiant:
+    "Les pièces demandées à l'étape suivante seront adaptées à votre profil. Un garant est souvent attendu.",
+  freelance:
+    "Des documents d'activité (Kbis, bilans ou liasses fiscales) vous seront demandés à l'étape suivante.",
+  alternant:
+    "Votre contrat d'alternance ou d'apprentissage sera intégré dans le dossier.",
+};
+
 export default function StepForm({ data, onChange, onNext }: StepFormProps) {
-  const update = (field: keyof UserFormData, value: string) =>
+  const update = (field: keyof UserFormData, value: string | boolean) =>
     onChange({ ...data, [field]: value });
 
+  const sit = data.situation as Situation | '';
+  const revConfig = REVENUE_CONFIG[sit] ?? REVENUE_CONFIG[''];
+
   const isValid =
-    data.firstName.trim() &&
-    data.lastName.trim() &&
-    data.email.trim() &&
-    data.phone.trim() &&
-    data.situation &&
-    data.revenue.trim();
+    !!data.firstName.trim() &&
+    !!data.lastName.trim() &&
+    !!data.email.trim() &&
+    !!data.phone.trim() &&
+    !!data.situation &&
+    (data.situation === 'etudiant' || !!data.revenue.trim());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,31 +125,68 @@ export default function StepForm({ data, onChange, onNext }: StepFormProps) {
           required
           className={`${inputClass} appearance-none cursor-pointer`}
         >
-          <option value="">Sélectionner...</option>
+          <option value="">Sélectionner votre situation…</option>
           {(Object.keys(SITUATION_LABELS) as Situation[]).map((key) => (
             <option key={key} value={key}>
               {SITUATION_LABELS[key]}
             </option>
           ))}
         </select>
+        {data.situation && SITUATION_HINTS[data.situation as Situation] && (
+          <p className="mt-1.5 text-xs text-primary-600 leading-relaxed">
+            {SITUATION_HINTS[data.situation as Situation]}
+          </p>
+        )}
       </div>
 
       {/* Revenus */}
       <div>
-        <label className={labelClass}>Revenus mensuels nets</label>
+        <label className={labelClass}>{revConfig.label}</label>
         <div className="relative">
           <input
             type="number"
             value={data.revenue}
             onChange={(e) => update('revenue', e.target.value)}
-            placeholder="2 500"
+            placeholder={revConfig.placeholder}
             min="0"
-            required
             className={`${inputClass} pr-10`}
           />
           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
             €
           </span>
+        </div>
+        {data.situation === 'etudiant' && (
+          <p className="mt-1.5 text-xs text-slate-400">
+            Indiquez 0 si vous n'avez pas de revenus. Ce champ est optionnel pour les étudiants.
+          </p>
+        )}
+      </div>
+
+      {/* Garant toggle */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Avez-vous un garant ?</p>
+            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+              {data.situation === 'etudiant'
+                ? 'Souvent exigé pour les étudiants. Ses documents seront intégrés dans une section dédiée.'
+                : "Optionnel — peut renforcer votre dossier si votre taux d'effort est élevé."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => update('hasGuarantor', !data.hasGuarantor)}
+            aria-pressed={data.hasGuarantor}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              data.hasGuarantor ? 'bg-primary-600' : 'bg-slate-200'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                data.hasGuarantor ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
         </div>
       </div>
 

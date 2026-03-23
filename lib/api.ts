@@ -11,10 +11,14 @@ export async function generatePreview(
   form.append('userData', JSON.stringify(formData));
   form.append('style', style);
 
-  if (files.identity) form.append('identity', files.identity);
-  if (files.contract) form.append('contract', files.contract);
-  files.payslips.forEach((f) => form.append('payslips', f));
-  if (files.guarantor) form.append('guarantor', files.guarantor);
+  if (files.identity)   form.append('identity',   files.identity);
+  if (files.domicile)   form.append('domicile',   files.domicile);
+  if (files.contract)   form.append('contract',   files.contract);
+  if (files.taxNotice)  form.append('taxNotice',  files.taxNotice);
+
+  files.payslips.forEach((f)      => form.append('payslips',       f));
+  files.businessDocs.forEach((f)  => form.append('businessDocs',   f));
+  files.guarantorFiles.forEach((f) => form.append('guarantorFiles', f));
 
   const res = await fetch(`${BACKEND_URL}/generate-preview`, {
     method: 'POST',
@@ -23,7 +27,7 @@ export async function generatePreview(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Erreur serveur' }));
-    throw new Error(err.error || 'Erreur lors de la génération de l\'aperçu');
+    throw new Error(err.error || "Erreur lors de la génération de l'aperçu");
   }
 
   return res.json();
