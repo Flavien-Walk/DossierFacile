@@ -69,13 +69,22 @@ const PALETTES = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 const SITUATION_LABELS = {
-  cdi: 'CDI', cdd: 'CDD', etudiant: 'Etudiant(e)',
-  freelance: 'Freelance / Independant', autre: 'Autre',
+  cdi:       'Salarie(e) CDI',
+  cdd:       'Salarie(e) CDD',
+  alternant: 'Alternant(e) / Apprenti(e)',
+  etudiant:  'Etudiant(e)',
+  freelance: 'Freelance / Independant(e)',
+  retraite:  'Retraite(e)',
+  autre:     'Autre situation',
 };
 
-function fmtRevenue(revenue) {
+function fmtRevenue(revenue, situation) {
   const n = Math.round(Number(revenue) || 0);
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' EUR / mois';
+  if (n === 0) {
+    if (situation === 'etudiant') return 'Revenus non renseignes';
+    return 'Non renseigne';
+  }
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' euros/mois';
 }
 
 function fmtDate() {
@@ -89,12 +98,28 @@ function getSit(userData) {
   return SITUATION_LABELS[userData.situation] || userData.situation || '';
 }
 
-function getDocsList(files) {
+// Dynamic section labels based on situation
+function getContractSectionLabel(situation) {
+  if (situation === 'etudiant')  return 'Justificatif de scolarite';
+  if (situation === 'alternant') return "Contrat d'alternance";
+  return 'Contrat de travail';
+}
+
+function getPayslipsSectionLabel(situation) {
+  if (situation === 'retraite') return 'Bulletins de pension';
+  return 'Bulletins de salaire';
+}
+
+function getDocsList(files, userData) {
+  const sit = userData?.situation || '';
   const d = [];
-  if (files.identity)             d.push("Piece d'identite");
-  if (files.contract)             d.push('Contrat de travail');
-  if (files.payslips?.length > 0) d.push(`Fiches de paie (${files.payslips.length})`);
-  if (files.guarantor)            d.push('Garant');
+  if (files.identity)                  d.push("Piece d'identite");
+  if (files.domicile)                  d.push('Justificatif de domicile');
+  if (files.contract)                  d.push(getContractSectionLabel(sit));
+  if (files.payslips?.length > 0)      d.push(`${getPayslipsSectionLabel(sit)} (${files.payslips.length})`);
+  if (files.taxNotice)                 d.push("Avis d'imposition");
+  if (files.businessDocs?.length > 0)  d.push(`Documents d'activite (${files.businessDocs.length})`);
+  if (files.guarantorFiles?.length > 0) d.push('Documents garant');
   return d;
 }
 
@@ -128,11 +153,8 @@ function drawFooter(page, fonts, p, num, total) {
 }
 
 // ─── Section header band ──────────────────────────────────────────────────
-// Drawn ON TOP of the page content so it always overlays the document
 function drawSectionBand(page, title, p, fonts) {
-  // Full-width accent band
   page.drawRectangle({ x: 0, y: PH - SEC_H, width: PW, height: SEC_H, color: p.accent });
-  // Left accent square (slightly darker)
   page.drawRectangle({ x: 0, y: PH - SEC_H, width: SEC_H, height: SEC_H, color: p.accentMid });
 
   const fs   = 8.5;
@@ -145,9 +167,6 @@ function drawSectionBand(page, title, p, fonts) {
 }
 
 // ─── computePlacement ─────────────────────────────────────────────────────
-// Returns { cx, cy, sw, sh } — centered placement within available zone.
-// hasBand: true if the section header band is present on this page.
-// isImage: adjusts margins accordingly.
 function computePlacement({ srcW, srcH, hasBand, isImage, maxScale = Infinity }) {
   const mSide = isImage ? IMG_M : PDF_M;
   const mTop  = hasBand ? SEC_H + mSide : mSide;
@@ -166,7 +185,6 @@ function computePlacement({ srcW, srcH, hasBand, isImage, maxScale = Infinity })
 }
 
 // ─── Image preprocessing (sharp) ─────────────────────────────────────────
-// Trims white borders and corrects EXIF orientation.
 async function trimImage(buffer, mimetype) {
   if (!sharp) return { buf: buffer, jpeg: mimetype !== 'image/png' };
   try {
@@ -182,15 +200,11 @@ async function trimImage(buffer, mimetype) {
 }
 
 // ─── drawDocumentFrame ───────────────────────────────────────────────────
-// Draws a white card with a very thin border around a document region.
-// Used for images to give them a framed / presented feel.
 function drawDocumentFrame(page, cx, cy, sw, sh, p) {
-  // Outer tinted halo
   page.drawRectangle({
     x: cx - 6, y: cy - 6, width: sw + 12, height: sh + 12,
     color: p.accentLight,
   });
-  // White card
   page.drawRectangle({
     x: cx - 1, y: cy - 1, width: sw + 2, height: sh + 2,
     color: p.white,
@@ -198,8 +212,6 @@ function drawDocumentFrame(page, cx, cy, sw, sh, p) {
 }
 
 // ─── fitImageToCanvas ────────────────────────────────────────────────────
-// Embeds an image file on a fresh A4 page with section band and frame.
-// Returns the 0-based page index of the new page.
 async function fitImageToCanvas(doc, file, sectionTitle, p, fonts) {
   const pageIndex = doc.getPageCount();
 
@@ -217,7 +229,7 @@ async function fitImageToCanvas(doc, file, sectionTitle, p, fonts) {
     srcW: iw, srcH: ih,
     hasBand: !!sectionTitle,
     isImage: true,
-    maxScale: 1.8, // allow upscale for small scans (ID cards etc.)
+    maxScale: 1.8,
   });
 
   const page = doc.addPage([PW, PH]);
@@ -231,8 +243,6 @@ async function fitImageToCanvas(doc, file, sectionTitle, p, fonts) {
 }
 
 // ─── fitPdfPageToCanvas ──────────────────────────────────────────────────
-// Embeds every page of a PDF source as an XObject on a fresh A4 page.
-// Returns the 0-based page index of the first new page.
 async function fitPdfPageToCanvas(doc, file, sectionTitle, p, fonts) {
   const firstIdx = doc.getPageCount();
 
@@ -248,7 +258,6 @@ async function fitPdfPageToCanvas(doc, file, sectionTitle, p, fonts) {
   try {
     embedded = await doc.embedPdf(srcDoc, srcDoc.getPageIndices());
   } catch {
-    // Fallback: direct page copy (loses placement control, but content is preserved)
     try {
       const copied = await doc.copyPages(srcDoc, srcDoc.getPageIndices());
       copied.forEach(cp => doc.addPage(cp));
@@ -272,7 +281,6 @@ async function fitPdfPageToCanvas(doc, file, sectionTitle, p, fonts) {
     page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.pageBg });
     page.drawPage(ep, { x: cx, y: cy, width: sw, height: sh });
 
-    // Section band drawn after drawPage — appears on top
     if (isFirst && sectionTitle) drawSectionBand(page, sectionTitle, p, fonts);
   }
 
@@ -288,14 +296,11 @@ async function embedDoc(doc, file, sectionTitle, p, fonts) {
 }
 
 // ─── buildClickableToc ───────────────────────────────────────────────────
-// Draws TOC content on a placeholder page and adds GoTo link annotations.
-// Called after all sections are built so page indices are final.
 function buildClickableToc(tocPage, entries, doc, p, fonts) {
   const { r, b } = fonts;
   const x  = INNER_M;
   const cw = PW - 2 * INNER_M;
 
-  // Page background + top bar
   tocPage.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.white });
   tocPage.drawRectangle({ x: 0, y: PH - 4, width: PW, height: 4, color: p.accent });
 
@@ -313,19 +318,16 @@ function buildClickableToc(tocPage, entries, doc, p, fonts) {
   for (const entry of entries) {
     const labelY = y - ROW_H / 2 + 5;
 
-    // Entry label
     tocPage.drawText(entry.label, {
       x: x + 10, y: labelY, size: 11, font: r, color: p.textDark,
     });
 
-    // Page number
     const pgStr = String(entry.displayPage);
     const pgW   = b.widthOfTextAtSize(pgStr, 11);
     tocPage.drawText(pgStr, {
       x: x + cw - pgW, y: labelY, size: 11, font: b, color: p.accent,
     });
 
-    // Dot leader
     const dotStart = x + 10 + r.widthOfTextAtSize(entry.label, 11) + 10;
     const dotEnd   = x + cw - pgW - 12;
     for (let lx = dotStart; lx < dotEnd; lx += 5) {
@@ -334,7 +336,6 @@ function buildClickableToc(tocPage, entries, doc, p, fonts) {
 
     hRule(tocPage, x, y - ROW_H, cw, p.accentLight, 0.4);
 
-    // GoTo link annotation
     _addGoToLink(doc, tocPage, [x, y - ROW_H, x + cw, y + 2], entry.pageIndex);
 
     y -= ROW_H + 6;
@@ -367,11 +368,8 @@ async function drawCover(doc, userData, files, p, fonts) {
   const x  = COVER_M;
   const cw = PW - 2 * COVER_M;
 
-  // Background
   page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: p.coverBg });
-  // Top accent bar
   page.drawRectangle({ x: 0, y: PH - 5, width: PW, height: 5, color: p.accent });
-  // Left thin strip
   page.drawRectangle({ x: 0, y: 0, width: 3, height: PH - 5, color: p.accentLight });
 
   let y = PH - 5 - COVER_M - 8;
@@ -395,7 +393,8 @@ async function drawCover(doc, userData, files, p, fonts) {
   y -= 18;
 
   const sit = getSit(userData);
-  page.drawText(`${sit}  —  ${fmtRevenue(userData.revenue)}`, {
+  const rev = fmtRevenue(userData.revenue, userData.situation);
+  page.drawText(`${sit}  —  ${rev}`, {
     x, y, size: 12, font: r, color: p.textMid,
   });
   y -= 36;
@@ -414,7 +413,7 @@ async function drawCover(doc, userData, files, p, fonts) {
 
   let ly = y - 28, ry = y - 28;
 
-  for (const [lbl, val] of [['SITUATION', sit], ['REVENUS NETS', fmtRevenue(userData.revenue)]]) {
+  for (const [lbl, val] of [['SITUATION', sit], ['REVENUS NETS', rev]]) {
     page.drawText(lbl, { x, y: ly,      size: 7,  font: b, color: p.textLight, characterSpacing: 0.5 });
     page.drawText(val, { x, y: ly - 13, size: 11, font: r, color: p.textDark });
     ly -= 40;
@@ -434,7 +433,7 @@ async function drawCover(doc, userData, files, p, fonts) {
   page.drawLine({ start: { x, y: y - 8 }, end: { x: x + 22, y: y - 8 }, thickness: 2, color: p.accent });
   y -= 28;
 
-  for (const name of getDocsList(files)) {
+  for (const name of getDocsList(files, userData)) {
     page.drawRectangle({ x, y: y + 2.5, width: 4, height: 4, color: p.accent });
     page.drawText(name, { x: x + 14, y, size: 11, font: r, color: p.textDark });
     y -= 23;
@@ -451,7 +450,6 @@ async function drawCover(doc, userData, files, p, fonts) {
 }
 
 // ─── applyPreviewWatermark ────────────────────────────────────────────────
-// Moderate grid: visible enough to prevent free use, light enough to read through.
 function applyPreviewWatermark(page, font) {
   const { width, height } = page.getSize();
   for (let row = 0; row < 5; row++) {
@@ -472,8 +470,8 @@ function applyPreviewWatermark(page, font) {
 // ─── Main ─────────────────────────────────────────────────────────────────
 
 /**
- * @param {object}  userData      { firstName, lastName, email, phone, situation, revenue }
- * @param {object}  files         { identity, contract, payslips[], guarantor }
+ * @param {object}  userData      { firstName, lastName, email, phone, situation, revenue, hasGuarantor }
+ * @param {object}  files         { identity, domicile, contract, payslips[], taxNotice, businessDocs[], guarantorFiles[] }
  * @param {string}  styleName     'classic' | 'modern' | 'premium'
  * @param {boolean} withWatermark true for preview, false for paid PDF
  * @returns {Promise<Buffer>}
@@ -486,7 +484,7 @@ async function generateDossierPDF(userData, files, styleName, withWatermark) {
   // 1. Cover (index 0)
   await drawCover(doc, userData, files, p, f);
 
-  // 2. TOC placeholder (index 1) — populated after all sections are known
+  // 2. TOC placeholder (index 1) — populated after all sections
   const tocPage = doc.addPage([PW, PH]);
 
   const tocEntries = [
@@ -500,36 +498,62 @@ async function generateDossierPDF(userData, files, styleName, withWatermark) {
     tocEntries.push({ label: "Piece d'identite", pageIndex: idx, displayPage: idx + 1 });
   }
 
-  // 4. Contract
-  if (files.contract) {
-    const idx = await embedDoc(doc, files.contract, 'Contrat de travail', p, f);
-    tocEntries.push({ label: 'Contrat de travail', pageIndex: idx, displayPage: idx + 1 });
+  // 4. Domicile (new)
+  if (files.domicile) {
+    const idx = await embedDoc(doc, files.domicile, 'Justificatif de domicile', p, f);
+    tocEntries.push({ label: 'Justificatif de domicile', pageIndex: idx, displayPage: idx + 1 });
   }
 
-  // 5. Payslips — first page gets section band + TOC entry; rest are continuation
+  // 5. Contract (label depends on situation)
+  if (files.contract) {
+    const lbl = getContractSectionLabel(userData.situation);
+    const idx = await embedDoc(doc, files.contract, lbl, p, f);
+    tocEntries.push({ label: lbl, pageIndex: idx, displayPage: idx + 1 });
+  }
+
+  // 6. Payslips (label depends on situation)
   if (files.payslips?.length > 0) {
-    const idx = await embedDoc(doc, files.payslips[0], 'Fiches de paie', p, f);
-    tocEntries.push({ label: 'Fiches de paie', pageIndex: idx, displayPage: idx + 1 });
+    const lbl = getPayslipsSectionLabel(userData.situation);
+    const idx = await embedDoc(doc, files.payslips[0], lbl, p, f);
+    tocEntries.push({ label: lbl, pageIndex: idx, displayPage: idx + 1 });
     for (let i = 1; i < files.payslips.length; i++) {
       await embedDoc(doc, files.payslips[i], null, p, f);
     }
   }
 
-  // 6. Guarantor
-  if (files.guarantor) {
-    const idx = await embedDoc(doc, files.guarantor, 'Garant', p, f);
-    tocEntries.push({ label: 'Garant', pageIndex: idx, displayPage: idx + 1 });
+  // 7. Tax notice (new)
+  if (files.taxNotice) {
+    const idx = await embedDoc(doc, files.taxNotice, "Avis d'imposition", p, f);
+    tocEntries.push({ label: "Avis d'imposition", pageIndex: idx, displayPage: idx + 1 });
+  }
+
+  // 8. Business docs (freelance, new)
+  if (files.businessDocs?.length > 0) {
+    const idx = await embedDoc(doc, files.businessDocs[0], "Documents d'activite", p, f);
+    tocEntries.push({ label: "Documents d'activite", pageIndex: idx, displayPage: idx + 1 });
+    for (let i = 1; i < files.businessDocs.length; i++) {
+      await embedDoc(doc, files.businessDocs[i], null, p, f);
+    }
+  }
+
+  // 9. Guarantor files (new)
+  if (files.guarantorFiles?.length > 0) {
+    const idx = await embedDoc(doc, files.guarantorFiles[0], 'Documents garant', p, f);
+    tocEntries.push({ label: 'Documents garant', pageIndex: idx, displayPage: idx + 1 });
+    for (let i = 1; i < files.guarantorFiles.length; i++) {
+      await embedDoc(doc, files.guarantorFiles[i], null, p, f);
+    }
   }
 
   const total = doc.getPageCount();
 
-  // 7. Populate TOC (2nd pass — all indices are now final)
+  // 10. Populate TOC (2nd pass — all indices are now final)
   buildClickableToc(tocPage, tocEntries, doc, p, f);
 
-  // 8. Footer on every page
+  // 11. Footer on every page
   doc.getPages().forEach((pg, i) => drawFooter(pg, f, p, i + 1, total));
 
-  // 9. Watermark on preview only
+  // 12. Watermark on preview only
   if (withWatermark) {
     for (const pg of doc.getPages()) applyPreviewWatermark(pg, f.b);
   }

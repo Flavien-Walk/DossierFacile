@@ -20,10 +20,13 @@ const upload = multer({
 });
 
 const uploadFields = upload.fields([
-  { name: 'identity', maxCount: 1 },
-  { name: 'contract', maxCount: 1 },
-  { name: 'payslips', maxCount: 5 },
-  { name: 'guarantor', maxCount: 3 },
+  { name: 'identity',       maxCount: 1  },
+  { name: 'domicile',       maxCount: 1  },
+  { name: 'contract',       maxCount: 1  },
+  { name: 'payslips',       maxCount: 10 },
+  { name: 'taxNotice',      maxCount: 1  },
+  { name: 'businessDocs',   maxCount: 10 },
+  { name: 'guarantorFiles', maxCount: 20 },
 ]);
 
 router.post('/generate-preview', uploadFields, async (req, res) => {
@@ -37,10 +40,13 @@ router.post('/generate-preview', uploadFields, async (req, res) => {
 
     const reqFiles = req.files || {};
     const files = {
-      identity: reqFiles.identity?.[0] || null,
-      contract: reqFiles.contract?.[0] || null,
-      payslips: reqFiles.payslips || [],
-      guarantor: reqFiles.guarantor?.[0] || null,
+      identity:       reqFiles.identity?.[0]       || null,
+      domicile:       reqFiles.domicile?.[0]        || null,
+      contract:       reqFiles.contract?.[0]        || null,
+      payslips:       reqFiles.payslips              || [],
+      taxNotice:      reqFiles.taxNotice?.[0]        || null,
+      businessDocs:   reqFiles.businessDocs          || [],
+      guarantorFiles: reqFiles.guarantorFiles        || [],
     };
 
     if (!files.identity) {
@@ -54,14 +60,13 @@ router.post('/generate-preview', uploadFields, async (req, res) => {
     const sessionToken = uuidv4();
     fileStore.set(sessionToken, { userData, files, style });
 
-    // Return base64 PDF + session token
     return res.json({
       pdfBase64: pdfBuffer.toString('base64'),
       sessionToken,
     });
   } catch (err) {
     console.error('[preview]', err);
-    return res.status(500).json({ error: 'Erreur lors de la génération de l\'aperçu.' });
+    return res.status(500).json({ error: "Erreur lors de la génération de l'aperçu." });
   }
 });
 
