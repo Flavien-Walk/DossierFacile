@@ -2,272 +2,249 @@
 
 const { PDFDocument, rgb, StandardFonts, degrees } = require('pdf-lib');
 
-// ─────────────────────────────────────────────
-// Style definitions
-// ─────────────────────────────────────────────
+// ─── Layout constants ────────────────────────────────────────────────────────
+const PW = 595;    // A4 width  (pt)
+const PH = 842;    // A4 height (pt)
+const M  = 42;     // outer margin
+const CW = PW - 2 * M;   // 511 — content width
 
+// ─── Style definitions ────────────────────────────────────────────────────────
 const STYLES = {
   classic: {
-    headerBg: rgb(0.94, 0.94, 0.94),
-    headerText: rgb(0.15, 0.15, 0.15),
-    accentLine: rgb(0.6, 0.6, 0.6),
-    nameColor: rgb(0.05, 0.05, 0.05),
-    labelColor: rgb(0.5, 0.5, 0.5),
-    valueColor: rgb(0.1, 0.1, 0.1),
-    sectionBg: rgb(0.96, 0.96, 0.96),
-    sectionText: rgb(0.25, 0.25, 0.25),
-    bodyFont: StandardFonts.TimesRoman,
-    boldFont: StandardFonts.TimesRomanBold,
+    accent:      rgb(0.28, 0.34, 0.46),   // muted blue-grey
+    accentLight: rgb(0.88, 0.90, 0.94),
+    textDark:    rgb(0.10, 0.12, 0.16),
+    textMid:     rgb(0.38, 0.42, 0.50),
+    textLight:   rgb(0.60, 0.63, 0.70),
+    white:       rgb(1, 1, 1),
+    bodyFont:    StandardFonts.TimesRoman,
+    boldFont:    StandardFonts.TimesRomanBold,
   },
   modern: {
-    headerBg: rgb(0.23, 0.51, 0.96),
-    headerText: rgb(1, 1, 1),
-    accentLine: rgb(0.23, 0.51, 0.96),
-    nameColor: rgb(0.05, 0.05, 0.05),
-    labelColor: rgb(0.23, 0.51, 0.96),
-    valueColor: rgb(0.1, 0.1, 0.1),
-    sectionBg: rgb(0.23, 0.51, 0.96),
-    sectionText: rgb(1, 1, 1),
-    bodyFont: StandardFonts.Helvetica,
-    boldFont: StandardFonts.HelveticaBold,
+    accent:      rgb(0.29, 0.42, 0.97),   // soft indigo
+    accentLight: rgb(0.92, 0.94, 0.99),
+    textDark:    rgb(0.08, 0.10, 0.14),
+    textMid:     rgb(0.35, 0.40, 0.50),
+    textLight:   rgb(0.58, 0.62, 0.70),
+    white:       rgb(1, 1, 1),
+    bodyFont:    StandardFonts.Helvetica,
+    boldFont:    StandardFonts.HelveticaBold,
   },
   premium: {
-    headerBg: rgb(0.08, 0.22, 0.42),
-    headerText: rgb(1, 1, 1),
-    accentLine: rgb(0.08, 0.22, 0.42),
-    nameColor: rgb(0.05, 0.05, 0.05),
-    labelColor: rgb(0.08, 0.22, 0.42),
-    valueColor: rgb(0.1, 0.1, 0.1),
-    sectionBg: rgb(0.08, 0.22, 0.42),
-    sectionText: rgb(1, 1, 1),
-    bodyFont: StandardFonts.Helvetica,
-    boldFont: StandardFonts.HelveticaBold,
+    accent:      rgb(0.08, 0.20, 0.38),   // deep navy
+    accentLight: rgb(0.90, 0.93, 0.97),
+    textDark:    rgb(0.07, 0.10, 0.14),
+    textMid:     rgb(0.33, 0.38, 0.47),
+    textLight:   rgb(0.55, 0.60, 0.68),
+    white:       rgb(1, 1, 1),
+    bodyFont:    StandardFonts.Helvetica,
+    boldFont:    StandardFonts.HelveticaBold,
   },
 };
 
+// ─── Text helpers ─────────────────────────────────────────────────────────────
+
 const SITUATION_LABELS = {
-  cdi: 'CDI',
-  cdd: 'CDD',
-  etudiant: 'Étudiant(e)',
-  freelance: 'Freelance / Indépendant',
-  autre: 'Autre',
+  cdi:      'CDI',
+  cdd:      'CDD',
+  etudiant: 'Etudiant(e)',
+  freelance:'Freelance / Independant',
+  autre:    'Autre',
 };
 
 function formatRevenue(revenue) {
-  // Avoid toLocaleString — it uses narrow no-break space (U+202F) as thousands
-  // separator in fr-FR, which is outside the WinAnsi encoding range in pdf-lib.
+  // Regex-based thousands separator — avoids U+202F from toLocaleString (not in WinAnsi)
   const n = Math.round(Number(revenue) || 0);
-  const formatted = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  return `${formatted} EUR/mois`;
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' EUR/mois';
 }
 
 function formatDate() {
-  return new Date().toLocaleDateString('fr-FR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const d = new Date();
+  const months = [
+    'janvier','fevrier','mars','avril','mai','juin',
+    'juillet','aout','septembre','octobre','novembre','decembre',
+  ];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// ─────────────────────────────────────────────
-// Cover page builders
-// ─────────────────────────────────────────────
+function buildDocsList(files) {
+  const docs = [];
+  if (files.identity) docs.push("Piece d'identite");
+  if (files.contract) docs.push('Contrat de travail');
+  if (files.payslips && files.payslips.length > 0) {
+    const n = files.payslips.length;
+    docs.push(`Fiches de paie (${n} document${n > 1 ? 's' : ''})`);
+  }
+  if (files.guarantor) docs.push('Garant');
+  return docs;
+}
 
-async function drawClassicCover(doc, userData) {
-  const s = STYLES.classic;
-  const regularFont = await doc.embedFont(s.bodyFont);
-  const boldFont = await doc.embedFont(s.boldFont);
-  const page = doc.addPage([595, 842]);
+// ─── Drawing primitives ───────────────────────────────────────────────────────
 
-  // Header band
-  page.drawRectangle({ x: 0, y: 762, width: 595, height: 80, color: s.headerBg });
+function hLine(page, x, y, w, color, thickness) {
+  page.drawLine({ start: { x, y }, end: { x: x + w, y }, thickness: thickness || 0.6, color });
+}
 
-  // Title
+function accentUnderline(page, x, y, s) {
+  page.drawLine({ start: { x, y }, end: { x: x + 22, y }, thickness: 2, color: s.accent });
+}
+
+function pageChrome(page, s, rf) {
+  // Top accent bar
+  page.drawRectangle({ x: 0, y: PH - 6, width: PW, height: 6, color: s.accent });
+  // Left thin strip
+  page.drawRectangle({ x: 0, y: 0, width: 3, height: PH - 6, color: s.accentLight });
+  // Footer text
+  const ftxt = 'Document confidentiel - DossierFacile';
+  const fw = rf.widthOfTextAtSize(ftxt, 8);
+  page.drawText(ftxt, { x: (PW - fw) / 2, y: M / 2, size: 8, font: rf, color: s.textLight });
+}
+
+// ─── Cover page ───────────────────────────────────────────────────────────────
+
+async function drawCoverPage(doc, userData, files, styleName) {
+  const s  = STYLES[styleName] || STYLES.modern;
+  const rf = await doc.embedFont(s.bodyFont);
+  const bf = await doc.embedFont(s.boldFont);
+  const page = doc.addPage([PW, PH]);
+
+  // White base
+  page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: s.white });
+  pageChrome(page, s, rf);
+
+  const x = M;
+  let y = PH - 6 - M - 4;
+
+  // ── Header row: label + date ──────────────────────────────────────────────
   page.drawText('DOSSIER LOCATAIRE', {
-    x: 50, y: 803, size: 18, font: boldFont, color: s.headerText,
+    x, y, size: 8.5, font: bf, color: s.textLight, characterSpacing: 2,
   });
+  const dateStr = formatDate();
+  const dw = rf.widthOfTextAtSize(dateStr, 8.5);
+  page.drawText(dateStr, { x: x + CW - dw, y, size: 8.5, font: rf, color: s.textLight });
+  y -= 6;
+  hLine(page, x, y, CW, s.accentLight, 0.8);
+  y -= 26;
 
-  // Date (right)
-  const date = formatDate();
-  page.drawText(date, {
-    x: 595 - 50 - boldFont.widthOfTextAtSize(date, 10), y: 803,
-    size: 10, font: regularFont, color: rgb(0.6, 0.6, 0.6),
-  });
-
-  // Separator line
-  page.drawLine({ start: { x: 50, y: 752 }, end: { x: 545, y: 752 }, thickness: 1, color: s.accentLine });
-
-  // Full name
+  // ── Hero: full name ───────────────────────────────────────────────────────
   const fullName = `${userData.firstName} ${userData.lastName}`;
-  page.drawText(fullName, { x: 50, y: 695, size: 30, font: boldFont, color: s.nameColor });
+  page.drawText(fullName, { x, y, size: 30, font: bf, color: s.textDark });
+  y -= 14;
 
-  // Short underline accent
-  page.drawLine({ start: { x: 50, y: 680 }, end: { x: 130, y: 680 }, thickness: 2, color: rgb(0.3, 0.3, 0.3) });
+  // Short accent underline below name
+  page.drawLine({ start: { x, y }, end: { x: x + 48, y }, thickness: 2.5, color: s.accent });
+  y -= 14;
 
-  // Fields
-  const fields = [
-    { label: 'SITUATION PROFESSIONNELLE', value: SITUATION_LABELS[userData.situation] || userData.situation },
-    { label: 'REVENUS MENSUELS', value: formatRevenue(userData.revenue) },
-    { label: 'EMAIL', value: userData.email },
-    { label: 'TÉLÉPHONE', value: userData.phone },
-  ];
+  // Subtitle: situation + revenus
+  const sit      = SITUATION_LABELS[userData.situation] || userData.situation;
+  const subtitle = sit + '  -  ' + formatRevenue(userData.revenue);
+  page.drawText(subtitle, { x, y, size: 11, font: rf, color: s.textMid });
+  y -= 26;
 
-  let y = 640;
-  for (const { label, value } of fields) {
-    page.drawText(label, { x: 50, y, size: 8, font: boldFont, color: s.labelColor });
-    page.drawText(value, { x: 50, y: y - 17, size: 13, font: regularFont, color: s.valueColor });
-    y -= 55;
+  hLine(page, x, y, CW, s.accentLight, 0.8);
+  y -= 30;
+
+  // ── Two-column info block ─────────────────────────────────────────────────
+  const colGap = 30;
+  const colW   = (CW - colGap) / 2;
+  const col2   = x + colW + colGap;
+
+  // Left: PROFIL
+  page.drawText('PROFIL', { x, y, size: 7.5, font: bf, color: s.accent, characterSpacing: 1.5 });
+  accentUnderline(page, x, y - 7, s);
+  let ly = y - 23;
+  for (const [label, value] of [
+    ['SITUATION',    sit],
+    ['REVENUS NETS', formatRevenue(userData.revenue)],
+  ]) {
+    page.drawText(label, { x, y: ly,      size: 7.5, font: bf, color: s.textLight, characterSpacing: 0.5 });
+    page.drawText(value, { x, y: ly - 14, size: 11,  font: rf, color: s.textDark });
+    ly -= 40;
   }
+
+  // Right: COORDONNEES
+  page.drawText('COORDONNEES', { x: col2, y, size: 7.5, font: bf, color: s.accent, characterSpacing: 1.5 });
+  accentUnderline(page, col2, y - 7, s);
+  let ry = y - 23;
+  for (const [label, value] of [
+    ['EMAIL',     userData.email],
+    ['TELEPHONE', userData.phone],
+  ]) {
+    page.drawText(label, { x: col2, y: ry,      size: 7.5, font: bf, color: s.textLight, characterSpacing: 0.5 });
+    page.drawText(value, { x: col2, y: ry - 14, size: 11,  font: rf, color: s.textDark });
+    ry -= 40;
+  }
+
+  y = Math.min(ly, ry) - 18;
+  hLine(page, x, y, CW, s.accentLight, 0.8);
+  y -= 30;
+
+  // ── Documents inclus ──────────────────────────────────────────────────────
+  page.drawText('CONTENU DU DOSSIER', { x, y, size: 7.5, font: bf, color: s.accent, characterSpacing: 1.5 });
+  accentUnderline(page, x, y - 7, s);
+  y -= 22;
+
+  for (const docName of buildDocsList(files)) {
+    // Bullet square
+    page.drawRectangle({ x, y: y + 2.5, width: 3.5, height: 3.5, color: s.accent });
+    page.drawText(docName, { x: x + 12, y, size: 11, font: rf, color: s.textDark });
+    y -= 20;
+  }
+
+  y -= 14;
+  hLine(page, x, y, CW, s.accentLight, 0.8);
 }
 
-async function drawModernCover(doc, userData) {
-  const s = STYLES.modern;
-  const regularFont = await doc.embedFont(s.bodyFont);
-  const boldFont = await doc.embedFont(s.boldFont);
-  const page = doc.addPage([595, 842]);
-
-  // Blue header (top 38%)
-  const headerHeight = 320;
-  page.drawRectangle({ x: 0, y: 842 - headerHeight, width: 595, height: headerHeight, color: s.headerBg });
-
-  // Label on header
-  page.drawText('DOSSIER LOCATAIRE', {
-    x: 50, y: 800, size: 10, font: boldFont, color: rgb(0.7, 0.85, 1),
-    characterSpacing: 1.5,
-  });
-
-  // Name on header
-  const fullName = `${userData.firstName} ${userData.lastName}`;
-  page.drawText(fullName, { x: 50, y: 765, size: 28, font: boldFont, color: s.headerText });
-
-  // Subtitle
-  // Middle dot U+00B7 is in WinAnsi (0xB7) — safe
-  const subtitle = `${SITUATION_LABELS[userData.situation] || userData.situation}  -  ${formatRevenue(userData.revenue)}`;
-  page.drawText(subtitle, { x: 50, y: 740, size: 12, font: regularFont, color: rgb(0.8, 0.9, 1) });
-
-  // Date
-  page.drawText(formatDate(), { x: 50, y: 550, size: 10, font: regularFont, color: rgb(0.5, 0.5, 0.5) });
-
-  // Separator
-  page.drawLine({ start: { x: 50, y: 540 }, end: { x: 545, y: 540 }, thickness: 1, color: rgb(0.88, 0.88, 0.88) });
-
-  // Contact fields (2 columns)
-  const left = [
-    { label: 'EMAIL', value: userData.email },
-    { label: 'TÉLÉPHONE', value: userData.phone },
-  ];
-  let y = 500;
-  for (const { label, value } of left) {
-    page.drawText(label, { x: 50, y, size: 8, font: boldFont, color: s.labelColor });
-    page.drawText(value, { x: 50, y: y - 16, size: 13, font: regularFont, color: s.valueColor });
-    y -= 55;
-  }
-}
-
-async function drawPremiumCover(doc, userData) {
-  const s = STYLES.premium;
-  const regularFont = await doc.embedFont(s.bodyFont);
-  const boldFont = await doc.embedFont(s.boldFont);
-  const page = doc.addPage([595, 842]);
-
-  // Navy sidebar
-  const sidebarWidth = 185;
-  page.drawRectangle({ x: 0, y: 0, width: sidebarWidth, height: 842, color: s.headerBg });
-
-  // Sidebar text — rotated label
-  page.drawText('DOSSIER', {
-    x: 50, y: 500, size: 13, font: boldFont, color: rgb(1, 1, 1),
-    rotate: degrees(90),
-  });
-  page.drawText('LOCATAIRE', {
-    x: 67, y: 500, size: 13, font: boldFont, color: rgb(0.6, 0.75, 0.95),
-    rotate: degrees(90),
-  });
-
-  // Initials circle on sidebar
-  const initials = `${userData.firstName[0] || ''}${userData.lastName[0] || ''}`.toUpperCase();
-  page.drawCircle({ x: sidebarWidth / 2, y: 720, size: 36, color: rgb(0.15, 0.35, 0.6) });
-  const initialsWidth = boldFont.widthOfTextAtSize(initials, 18);
-  page.drawText(initials, {
-    x: sidebarWidth / 2 - initialsWidth / 2, y: 711,
-    size: 18, font: boldFont, color: rgb(1, 1, 1),
-  });
-
-  // Main content area
-  const contentX = sidebarWidth + 30;
-  const contentWidth = 595 - contentX - 30;
-
-  // Title
-  page.drawText('Dossier Locataire', { x: contentX, y: 790, size: 11, font: boldFont, color: rgb(0.6, 0.6, 0.6), characterSpacing: 0.5 });
-
-  // Name
-  const fullName = `${userData.firstName} ${userData.lastName}`;
-  page.drawText(fullName, { x: contentX, y: 755, size: 26, font: boldFont, color: s.nameColor });
-
-  // Accent line
-  page.drawLine({ start: { x: contentX, y: 742 }, end: { x: contentX + 100, y: 742 }, thickness: 2, color: s.accentLine });
-
-  // Date
-  page.drawText(formatDate(), { x: contentX, y: 720, size: 10, font: regularFont, color: rgb(0.6, 0.6, 0.6) });
-
-  // Fields
-  const fields = [
-    { label: 'SITUATION', value: SITUATION_LABELS[userData.situation] || userData.situation },
-    { label: 'REVENUS MENSUELS', value: formatRevenue(userData.revenue) },
-    { label: 'EMAIL', value: userData.email },
-    { label: 'TÉLÉPHONE', value: userData.phone },
-  ];
-
-  let y = 665;
-  for (const { label, value } of fields) {
-    page.drawRectangle({ x: contentX, y: y + 2, width: 3, height: 30, color: s.accentLine });
-    page.drawText(label, { x: contentX + 12, y: y + 22, size: 7.5, font: boldFont, color: s.labelColor, characterSpacing: 0.8 });
-    page.drawText(value, { x: contentX + 12, y: y + 5, size: 13, font: regularFont, color: s.valueColor });
-    y -= 55;
-  }
-}
-
-// ─────────────────────────────────────────────
-// Section divider page
-// ─────────────────────────────────────────────
+// ─── Section divider page ─────────────────────────────────────────────────────
 
 async function addSectionPage(doc, title, styleName) {
-  const s = STYLES[styleName];
-  const boldFont = await doc.embedFont(s.boldFont);
-  const page = doc.addPage([595, 842]);
+  const s  = STYLES[styleName] || STYLES.modern;
+  const rf = await doc.embedFont(s.bodyFont);
+  const bf = await doc.embedFont(s.boldFont);
+  const page = doc.addPage([PW, PH]);
 
-  // Accent bar on left
-  page.drawRectangle({ x: 0, y: 0, width: 6, height: 842, color: s.sectionBg });
+  page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: s.white });
+  pageChrome(page, s, rf);
 
-  // Section title
-  page.drawText(title, { x: 50, y: 430, size: 22, font: boldFont, color: s.sectionBg });
+  // Title at visual center (golden ratio: ~48% from bottom)
+  const cy = Math.round(PH * 0.48);
 
-  // Thin line below
+  page.drawText(title.toUpperCase(), {
+    x: M, y: cy,
+    size: 26, font: bf, color: s.textDark, characterSpacing: 1,
+  });
+
+  // Accent underline
   page.drawLine({
-    start: { x: 50, y: 415 }, end: { x: 200, y: 415 },
-    thickness: 1.5, color: s.accentLine,
+    start: { x: M, y: cy - 12 }, end: { x: M + 50, y: cy - 12 },
+    thickness: 2.5, color: s.accent,
+  });
+
+  // Hint line
+  page.drawText('Documents de la section ci-apres', {
+    x: M, y: cy - 32,
+    size: 10, font: rf, color: s.textLight,
   });
 }
 
-// ─────────────────────────────────────────────
-// Embed uploaded documents
-// ─────────────────────────────────────────────
+// ─── Document embedding ───────────────────────────────────────────────────────
 
 async function embedDocument(doc, file) {
   const { buffer, mimetype } = file;
 
+  // ── PDF: copy pages at their native size ──────────────────────────────────
   if (mimetype === 'application/pdf') {
     try {
-      const srcDoc = await PDFDocument.load(buffer);
-      const pages = await doc.copyPages(srcDoc, srcDoc.getPageIndices());
-      pages.forEach((p) => doc.addPage(p));
+      const src = await PDFDocument.load(buffer);
+      const pages = await doc.copyPages(src, src.getPageIndices());
+      pages.forEach(p => doc.addPage(p));
     } catch {
       // Corrupted PDF — skip silently
     }
     return;
   }
 
-  // Image (jpg/png)
+  // ── Image: scale to fill, centered ───────────────────────────────────────
   let image;
   try {
     if (mimetype === 'image/jpeg' || mimetype === 'image/jpg') {
@@ -275,85 +252,91 @@ async function embedDocument(doc, file) {
     } else if (mimetype === 'image/png') {
       image = await doc.embedPng(buffer);
     } else {
-      return; // Unsupported
+      return; // Unsupported type
     }
   } catch {
     return;
   }
 
-  const page = doc.addPage([595, 842]);
   const { width, height } = image;
-  const scale = Math.min((595 - 60) / width, (842 - 60) / height, 1);
-  const scaledW = width * scale;
-  const scaledH = height * scale;
 
-  page.drawImage(image, {
-    x: (595 - scaledW) / 2,
-    y: (842 - scaledH) / 2,
-    width: scaledW,
-    height: scaledH,
+  // Scale to fill available content area — NOTE: no artificial cap of 1,
+  // so small images are scaled UP to maximise readability.
+  const maxW  = PW - 2 * M;
+  const maxH  = PH - 2 * M;
+  const scale = Math.min(maxW / width, maxH / height);
+  const sw    = width  * scale;
+  const sh    = height * scale;
+
+  const cx = (PW - sw) / 2;
+  const cy = (PH - sh) / 2;
+
+  const page = doc.addPage([PW, PH]);
+
+  // Subtle warm grey background
+  page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: rgb(0.95, 0.95, 0.96) });
+
+  // White backing card (shadow illusion)
+  const pad = 10;
+  page.drawRectangle({
+    x: cx - pad, y: cy - pad,
+    width: sw + 2 * pad, height: sh + 2 * pad,
+    color: rgb(1, 1, 1),
   });
+
+  // Image
+  page.drawImage(image, { x: cx, y: cy, width: sw, height: sh });
 }
 
-// ─────────────────────────────────────────────
-// Watermark
-// ─────────────────────────────────────────────
+// ─── Watermark ────────────────────────────────────────────────────────────────
 
-async function addWatermarkToPage(page, font) {
+function applyWatermark(page, font) {
   const { width, height } = page.getSize();
-  // Use only ASCII + Latin-1 characters (WinAnsi-safe for pdf-lib standard fonts)
-  const text = 'APERCU - VERSION NON PAYEE';
-  const fontSize = 26;
+  const text = 'APERCU - NON PAYEE';
 
-  for (let y = 80; y < height; y += 170) {
+  for (let y = 60; y < height + 300; y += 200) {
     page.drawText(text, {
-      x: 30,
-      y,
-      size: fontSize,
-      font,
-      color: rgb(0.6, 0.6, 0.6),
-      opacity: 0.25,
-      rotate: degrees(38),
+      x: 25, y,
+      size: 22, font,
+      color: rgb(0.5, 0.5, 0.5),
+      opacity: 0.15,
+      rotate: degrees(35),
     });
   }
 }
 
-// ─────────────────────────────────────────────
-// Main generator
-// ─────────────────────────────────────────────
+// ─── Main generator ───────────────────────────────────────────────────────────
 
 /**
  * Generate a dossier PDF.
- * @param {object} userData - { firstName, lastName, email, phone, situation, revenue }
- * @param {object} files    - { identity, contract, payslips[], guarantor }
- * @param {string} styleName - 'classic' | 'modern' | 'premium'
+ * @param {object}  userData      - { firstName, lastName, email, phone, situation, revenue }
+ * @param {object}  files         - { identity, contract, payslips[], guarantor }
+ * @param {string}  styleName     - 'classic' | 'modern' | 'premium'
  * @param {boolean} withWatermark
  * @returns {Promise<Buffer>}
  */
 async function generateDossierPDF(userData, files, styleName, withWatermark) {
-  const style = STYLES[styleName] || STYLES.modern;
+  const s   = STYLES[styleName] || STYLES.modern;
   const doc = await PDFDocument.create();
 
   // 1. Cover page
-  if (styleName === 'classic') await drawClassicCover(doc, userData);
-  else if (styleName === 'premium') await drawPremiumCover(doc, userData);
-  else await drawModernCover(doc, userData);
+  await drawCoverPage(doc, userData, files, styleName);
 
   // 2. Identity
   if (files.identity) {
-    await addSectionPage(doc, "PIÈCE D'IDENTITÉ", styleName);
+    await addSectionPage(doc, "Piece d'identite", styleName);
     await embedDocument(doc, files.identity);
   }
 
   // 3. Contract
   if (files.contract) {
-    await addSectionPage(doc, 'CONTRAT DE TRAVAIL', styleName);
+    await addSectionPage(doc, 'Contrat de travail', styleName);
     await embedDocument(doc, files.contract);
   }
 
   // 4. Payslips
   if (files.payslips && files.payslips.length > 0) {
-    await addSectionPage(doc, 'FICHES DE PAIE', styleName);
+    await addSectionPage(doc, 'Fiches de paie', styleName);
     for (const f of files.payslips) {
       await embedDocument(doc, f);
     }
@@ -361,21 +344,19 @@ async function generateDossierPDF(userData, files, styleName, withWatermark) {
 
   // 5. Guarantor
   if (files.guarantor) {
-    await addSectionPage(doc, 'GARANT', styleName);
+    await addSectionPage(doc, 'Garant', styleName);
     await embedDocument(doc, files.guarantor);
   }
 
-  // 6. Watermark (preview only)
+  // 6. Watermark on preview only
   if (withWatermark) {
-    const boldFont = await doc.embedFont(style.boldFont);
-    const pages = doc.getPages();
-    for (const page of pages) {
-      await addWatermarkToPage(page, boldFont);
+    const boldFont = await doc.embedFont(s.boldFont);
+    for (const page of doc.getPages()) {
+      applyWatermark(page, boldFont);
     }
   }
 
-  const pdfBytes = await doc.save();
-  return Buffer.from(pdfBytes);
+  return Buffer.from(await doc.save());
 }
 
 module.exports = { generateDossierPDF };
