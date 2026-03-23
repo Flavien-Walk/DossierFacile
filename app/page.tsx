@@ -2,6 +2,7 @@ import Link from 'next/link';
 import TrustBadges from '@/components/TrustBadges';
 import Benefits from '@/components/Benefits';
 import HowItWorks from '@/components/HowItWorks';
+import HeroDossierPreview from '@/components/HeroDossierPreview';
 
 export default function Home() {
   return (
@@ -25,72 +26,80 @@ export default function Home() {
 
       {/* ── Hero ────────────────────────────────────────── */}
       <section className="hero-bg">
-        <div className="max-w-5xl mx-auto px-6 pt-20 pb-20">
-          <div className="max-w-[640px]">
+        <div className="max-w-5xl mx-auto px-6 pt-16 pb-16 lg:pt-20 lg:pb-20">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
 
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 bg-white text-slate-600 text-xs font-semibold px-3.5 py-2 rounded-full mb-8 border border-slate-200 shadow-card">
-              <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 1l2.928 6.472L20 8.556l-5 4.86 1.18 6.868L10 17.27l-6.18 3.014L5 13.416 0 8.556l7.072-1.084L10 1z" clipRule="evenodd" />
-              </svg>
-              Sans compte · Sans stockage · Suppression automatique
-            </div>
-
-            {/* Title */}
-            <h1 className="text-[2.75rem] sm:text-[3.25rem] font-bold text-slate-900 leading-[1.12] tracking-tight mb-5">
-              Créez un dossier locataire{' '}
-              <span className="text-primary-600">professionnel</span>{' '}
-              en 2 minutes
-            </h1>
-
-            {/* Lead */}
-            <p className="text-lg text-slate-600 mb-4 leading-relaxed max-w-[520px]">
-              Un dossier bien présenté peut faire la différence. DossierFacile met en forme
-              vos documents et génère un PDF clair, lisible et professionnel.
-            </p>
-
-            {/* Trust micro-copy */}
-            <p className="text-sm text-slate-400 mb-10 leading-relaxed">
-              Aucune inscription. Vos documents ne sont jamais stockés.
-              Suppression automatique après génération.
-            </p>
-
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3 items-start">
-              <Link
-                href="/create"
-                className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold px-8 py-4 rounded-xl text-base transition-all shadow-btn hover:shadow-btn-hover hover:-translate-y-px"
-              >
-                Créer mon dossier
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            {/* ── Left: text content ── */}
+            <div>
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 bg-white text-slate-600 text-xs font-semibold px-3.5 py-2 rounded-full mb-8 border border-slate-200 shadow-card">
+                <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 1l2.928 6.472L20 8.556l-5 4.86 1.18 6.868L10 17.27l-6.18 3.014L5 13.416 0 8.556l7.072-1.084L10 1z" clipRule="evenodd" />
                 </svg>
-              </Link>
-              <a
-                href="#comment-ca-marche"
-                className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium px-8 py-4 rounded-xl text-base transition-colors border border-slate-200 bg-white hover:border-slate-300 shadow-card"
-              >
-                Comment ça marche
-              </a>
+                Sans compte · Sans stockage · Suppression automatique
+              </div>
+
+              {/* Title */}
+              <h1 className="text-[2.5rem] sm:text-[3rem] lg:text-[3.25rem] font-bold text-slate-900 leading-[1.1] tracking-tight mb-5">
+                Créez un dossier locataire{' '}
+                <span className="text-primary-600">professionnel</span>{' '}
+                en 2 minutes
+              </h1>
+
+              {/* Lead */}
+              <p className="text-lg text-slate-600 mb-4 leading-relaxed">
+                Un dossier bien présenté peut faire la différence. DossierFacile
+                met en forme vos documents et génère un PDF clair, lisible et
+                professionnel.
+              </p>
+
+              {/* Trust micro-copy */}
+              <p className="text-sm text-slate-400 mb-10 leading-relaxed">
+                Aucune inscription. Vos documents ne sont jamais stockés.
+                Suppression automatique après génération.
+              </p>
+
+              {/* CTAs */}
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <Link
+                  href="/create"
+                  className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold px-8 py-4 rounded-xl text-base transition-all shadow-btn hover:shadow-btn-hover hover:-translate-y-px"
+                >
+                  Créer mon dossier
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+                <a
+                  href="#comment-ca-marche"
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium px-8 py-4 rounded-xl text-base transition-colors border border-slate-200 bg-white hover:border-slate-300 shadow-card"
+                >
+                  Comment ça marche
+                </a>
+              </div>
+
+              {/* Social proof chips */}
+              <div className="flex flex-wrap items-center gap-3 mt-8">
+                <span className="text-xs text-slate-400">Inclus :</span>
+                {[
+                  'Prévisualisation gratuite',
+                  '3 styles PDF',
+                  'Email de candidature',
+                  '5 € paiement unique',
+                ].map((item) => (
+                  <span key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-card">
+                    <svg className="w-3 h-3 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    {item}
+                  </span>
+                ))}
+              </div>
             </div>
 
-            {/* Social proof chips */}
-            <div className="flex flex-wrap items-center gap-3 mt-8">
-              <span className="text-xs text-slate-400">Inclus :</span>
-              {[
-                'Prévisualisation gratuite',
-                '3 styles PDF',
-                'Email de candidature',
-                '5 € paiement unique',
-              ].map((item) => (
-                <span key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-card">
-                  <svg className="w-3 h-3 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  {item}
-                </span>
-              ))}
-            </div>
+            {/* ── Right: dossier preview ── */}
+            <HeroDossierPreview />
+
           </div>
         </div>
       </section>
