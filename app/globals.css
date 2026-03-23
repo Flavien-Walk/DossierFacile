@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: 'Inter', sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply text-gray-900 bg-white antialiased;
+}
+
+/* Upload zone drag state */
+.upload-zone-active {
+  @apply border-primary-500 bg-primary-50;
+}
